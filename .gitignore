@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+.mypy_cache/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Data (large files — download with src/data_loader.py)
+data/raw/
+data/processed/
+
+# Model checkpoints (too large for git)
+models/
+
+# Secrets & keys
+.env
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

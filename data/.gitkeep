@@ -1,0 +1,11 @@
+# Data directory
+
+Place raw and processed CSV files here.
+
+```
+data/
+├── raw/          ← unmodified files from yfinance / news API
+└── processed/   ← cleaned, normalized, feature-engineered CSVs
+```
+
+These files are git-ignored. Use `src/data_loader.py` to download and build them.

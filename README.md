@@ -10,6 +10,45 @@ The goal is not to predict an exact "closing price," but to provide a **probabil
 
 ---
 
+## ⚡ Getting Started (Environment Setup)
+
+### 1. Install Miniconda
+Download and install [Miniconda](https://docs.conda.io/en/latest/miniconda.html) for Windows (Python 3.11 installer).
+
+### 2. Create the environment
+```bash
+conda env create -f environment.yml
+conda activate context-quant
+```
+
+### 3. Verify the setup
+```bash
+python verify_setup.py
+```
+
+### 4. Launch Jupyter
+```bash
+jupyter lab
+```
+Then open the `notebooks/` folder and start with `00_pytorch_fundamentals/`.
+
+---
+
+## 📚 Learning Path (Notebooks)
+
+The `notebooks/` folder is structured to build skills progressively toward the full ContextQuant system.
+
+| Module | Topics | Ties Into |
+|--------|--------|-----------|
+| `00_pytorch_fundamentals/` | Tensors, autograd, training loops | Everything |
+| `01_time_series_basics/` | Pandas, NumPy, OHLCV data | Branch A (Temporal) |
+| `02_neural_networks/` | Linear layers, activations, loss, optimizers | The Fusion Layer |
+| `03_lstms_and_sequences/` | RNNs, LSTMs, sequence modeling | Branch A (Temporal) |
+| `04_nlp_and_transformers/` | Tokenizers, BERT, FinBERT embeddings | Branch B (Linguistic) |
+| `05_building_contextquant/` | Late Fusion Net, training, inference | The Full System |
+
+---
+
 ## 🚀 The Vision
 Financial markets in 2026 are increasingly driven by "Narrative Violations." A company can have perfect technicals but crash on a single news headline. ContextQuant is built to:
 1.  **Quantify Sentiment:** Use FinBERT to extract nuanced financial sentiment from news.
@@ -34,7 +73,7 @@ ContextQuant employs a **Late Fusion Network** implemented in PyTorch:
 * **Framework:** PyTorch & PyTorch Lightning (for scalable training).
 * **NLP:** Hugging Face `transformers` (specifically `ProsusAI/finbert`).
 * **Data:** `yfinance` (Market Data) and `NewsAPI` or `AlphaVantage` (Financial News).
-* **Calculations:** `pandas_ta` for technical indicator generation.
+* **Calculations:** `ta` for technical indicator generation (RSI, MACD, Bollinger Bands, etc.).
 * **Dashboard:** Streamlit for the user-facing Guidance Report.
 
 ---
@@ -59,12 +98,20 @@ ContextQuant employs a **Late Fusion Network** implemented in PyTorch:
 
 ## 📂 Project Structure
 ```text
-├── data/               # Raw and processed CSVs
-├── models/             # Saved .pt model checkpoints
+├── notebooks/
+│   ├── 00_pytorch_fundamentals/   ← START HERE
+│   ├── 01_time_series_basics/
+│   ├── 02_neural_networks/
+│   ├── 03_lstms_and_sequences/
+│   ├── 04_nlp_and_transformers/
+│   └── 05_building_contextquant/
 ├── src/
 │   ├── data_loader.py  # Data ingestion & preprocessing
-│   ├── model.py        # PyTorch architecture
-│   ├── train.py        # Training & Validation scripts
+│   ├── model.py        # PyTorch architecture (ContextQuantFusionNet)
+│   ├── train.py        # Training & validation loop
 │   └── utils.py        # Technical indicators & helpers
+├── data/               # Raw and processed CSVs (git-ignored)
+├── models/             # Saved .pt model checkpoints (git-ignored)
 ├── app.py              # Streamlit Dashboard
-└── requirements.txt
+├── environment.yml     # Conda environment (start here for setup)
+└── verify_setup.py     # One-shot environment health check
