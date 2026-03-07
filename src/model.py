@@ -1,5 +1,4 @@
-"""
-model.py — ContextQuantFusionNet PyTorch architecture.
+"""ContextQuantFusionNet PyTorch architecture.
 
 Architecture (Late Fusion):
   Branch A (Temporal) : Stacked LSTM / TFT on 60-day OHLCV windows
