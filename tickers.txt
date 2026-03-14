@@ -1,0 +1,132 @@
+# ContextQuant — training universe
+# One ticker per line. Blank lines and lines starting with # are ignored.
+# Edit freely — add or remove symbols as needed.
+# Pass this file with:  uv run python -m src.train --tickers-file tickers.txt
+
+# ── Broad market ETFs ─────────────────────────────────────────────────────────
+SPY
+IVV
+QQQ
+QQQM
+IWM
+DIA
+VOO
+VTI
+
+# ── Gold & commodities ────────────────────────────────────────────────────────
+GLD
+IAU
+SLV
+GDX
+NEM
+GOLD
+
+# ── Mega-cap tech ─────────────────────────────────────────────────────────────
+AAPL
+MSFT
+NVDA
+GOOGL
+META
+AMZN
+TSLA
+TSM
+AVGO
+ORCL
+AMD
+CRM
+ADBE
+NFLX
+INTC
+QCOM
+NOW
+INTU
+MU
+PLTR
+SNOW
+UBER
+ARM
+ANET
+MRVL
+DDOG
+
+# ── Financials ────────────────────────────────────────────────────────────────
+JPM
+BAC
+GS
+V
+MA
+WFC
+MS
+AXP
+BLK
+C
+COF
+
+# ── Healthcare ────────────────────────────────────────────────────────────────
+UNH
+JNJ
+LLY
+ABBV
+PFE
+MRK
+TMO
+AMGN
+BMY
+GILD
+DHR
+CVS
+
+# ── Energy ────────────────────────────────────────────────────────────────────
+XOM
+CVX
+SLB
+COP
+EOG
+
+# ── Consumer discretionary ────────────────────────────────────────────────────
+WMT
+HD
+MCD
+COST
+NKE
+SBUX
+TGT
+LOW
+TJX
+
+# ── Consumer staples ──────────────────────────────────────────────────────────
+PG
+KO
+PEP
+PM
+MO
+
+# ── Industrials ───────────────────────────────────────────────────────────────
+CAT
+BA
+GE
+HON
+UPS
+FDX
+LMT
+RTX
+DE
+
+# ── Communication ─────────────────────────────────────────────────────────────
+VZ
+T
+CMCSA
+DIS
+
+# ── Real estate (REITs) ───────────────────────────────────────────────────────
+AMT
+PLD
+EQIX
+
+# ── Utilities ────────────────────────────────────────────────────────────────
+NEE
+DUK
+
+# ── Materials ────────────────────────────────────────────────────────────────
+LIN
+APD

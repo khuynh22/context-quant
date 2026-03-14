@@ -35,8 +35,8 @@ DATA_DIR: Final[Path] = Path(__file__).parent.parent / "data"
 
 def download_ohlcv(
     ticker: str,
-    start: str = "2018-01-01",
-    end: str = "2024-12-31",
+    start: str = "2010-01-01",
+    end: str | None = None,
 ) -> pd.DataFrame:
     """Download daily OHLCV data from Yahoo Finance via yfinance.
 
@@ -49,6 +49,8 @@ def download_ohlcv(
         pd.DataFrame: DatetimeIndex DataFrame with columns ``[Open, High, Low, Close, Volume]``.
             Falls back to synthetic data when the network is unavailable.
     """
+    if end is None:
+        end = pd.Timestamp.today().strftime("%Y-%m-%d")
     try:
         df = yf.download(ticker, start=start, end=end, auto_adjust=False, progress=False)
         if isinstance(df.columns, pd.MultiIndex):
@@ -82,16 +84,12 @@ def _synthetic_ohlcv(n: int = 1000, seed: int = 42) -> pd.DataFrame:
 def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """Compute RSI-14, MACD, and Bollinger Bands using the `ta` library.
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        OHLCV DataFrame (must include a ``Close`` column).
+    Args:
+        df (pd.DataFrame): OHLCV DataFrame (must include a ``Close`` column).
 
-    Returns
-    -------
-    pd.DataFrame
-        Copy of *df* with six additional columns:
-        ``RSI_14``, ``MACD``, ``MACD_SIGNAL``, ``BB_MID``, ``BB_HIGH``, ``BB_LOW``.
+    Returns:
+        pd.DataFrame: Copy of *df* with six additional columns:
+            ``RSI_14``, ``MACD``, ``MACD_SIGNAL``, ``BB_MID``, ``BB_HIGH``, ``BB_LOW``.
     """
     df = df.copy()
     prices = df["Close"]
@@ -121,15 +119,11 @@ def create_5class_labels(df: pd.DataFrame) -> pd.Series:
         3  Buy           +0.5 % ≤ ret < +2 %
         4  Strong Buy    ret ≥ +2 %
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame that contains a ``Close`` column.
+    Args:
+        df (pd.DataFrame): DataFrame that contains a ``Close`` column.
 
-    Returns
-    -------
-    pd.Series
-        Integer series aligned to *df* (last row is NaN-dropped).
+    Returns:
+        pd.Series: Integer series aligned to *df* (last row is NaN-dropped).
     """
     next_return = df["Close"].pct_change(1).shift(-1)
     t = RETURN_THRESHOLDS
@@ -148,19 +142,14 @@ def make_windows(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Convert a flat 2-D feature array into overlapping sequences.
 
-    Parameters
-    ----------
-    X : np.ndarray, shape ``(T, F)``
-        Normalized feature matrix.
-    y : np.ndarray, shape ``(T,)``
-        Integer class labels.
-    window_size : int
-        Number of time steps per input window (default 60).
+    Args:
+        X (np.ndarray): Shape ``(T, F)``. Normalized feature matrix.
+        y (np.ndarray): Shape ``(T,)``. Integer class labels.
+        window_size (int): Number of time steps per input window (default 60).
 
-    Returns
-    -------
-    X_seq : np.ndarray, shape ``(T-window_size, window_size, F)``
-    y_seq : np.ndarray, shape ``(T-window_size,)``
+    Returns:
+        tuple[np.ndarray, np.ndarray]: ``X_seq`` of shape ``(T-window_size, window_size, F)``
+            and ``y_seq`` of shape ``(T-window_size,)``.
     """
     X_seq, y_seq = [], []
     for i in range(window_size, len(X)):
@@ -171,8 +160,8 @@ def make_windows(
 
 def build_dataset(
     ticker: str = "AAPL",
-    start: str = "2018-01-01",
-    end: str = "2024-12-31",
+    start: str = "2010-01-01",
+    end: str | None = None,
     window_size: int = WINDOW_SIZE,
     train_ratio: float = 0.70,
     val_ratio: float = 0.15,
@@ -181,32 +170,27 @@ def build_dataset(
 ) -> dict[str, torch.Tensor]:
     """End-to-end data pipeline: download → indicators → labels → split → scale → windows.
 
-    Parameters
-    ----------
-    ticker : str
-        Yahoo Finance ticker symbol.
-    start, end : str
-        Date range for data download.
-    window_size : int
-        Length of each input sequence in trading days (default 60).
-    train_ratio, val_ratio : float
-        Fractions for train/validation splits; rest goes to test.
-    save : bool
-        If True, save ``.npz`` files to *processed_dir*.
-    processed_dir : Path, optional
-        Destination folder for processed artefacts.  Defaults to
-        ``<repo_root>/data/processed/``.
+    Args:
+        ticker (str): Yahoo Finance ticker symbol.
+        start (str): Start date for data download (default ``"2010-01-01"``).
+        end (str, optional): End date for data download. Defaults to today's date so the
+            dataset is always current when re-run.
+        window_size (int): Length of each input sequence in trading days (default 60).
+        train_ratio (float): Fraction for train split; rest splits between val and test.
+        val_ratio (float): Fraction for validation split.
+        save (bool): If True, save ``.npz`` files to *processed_dir*.
+        processed_dir (Path, optional): Destination folder for processed artefacts. Defaults to
+            ``<repo_root>/data/processed/``.
 
-    Returns
-    -------
-    dict with keys ``X_train``, ``y_train``, ``X_val``, ``y_val``,
-    ``X_test``, ``y_test`` as ``torch.Tensor`` on CPU.
+    Returns:
+        dict: Keys ``X_train``, ``y_train``, ``X_val``, ``y_val``,
+            ``X_test``, ``y_test`` as ``torch.Tensor`` on CPU.
     """
     if processed_dir is None:
         processed_dir = DATA_DIR / "processed"
     processed_dir.mkdir(parents=True, exist_ok=True)
 
-    df = download_ohlcv(ticker, start=start, end=end)
+    df = download_ohlcv(ticker, start=start, end=end)  # end=None → today
     df = add_technical_indicators(df)
 
     # Drop the last row — no next-day return for labelling.
@@ -261,23 +245,81 @@ def build_dataset(
     }
 
 
+def build_multi_dataset(
+    tickers: list[str],
+    start: str = "2010-01-01",
+    end: str | None = None,
+    window_size: int = WINDOW_SIZE,
+    train_ratio: float = 0.70,
+    val_ratio: float = 0.15,
+) -> dict[str, torch.Tensor]:
+    """Build one combined dataset from multiple tickers for multi-stock training.
+
+    Each ticker is downloaded and scaled **independently** with its own
+    ``MinMaxScaler`` (so AAPL at $180 and NVDA at $900 don't distort each
+    other). The 60-day windows are then concatenated across all tickers so
+    the LSTM learns general price-movement patterns rather than one stock's
+    behaviour.
+
+    Args:
+        tickers (list[str]): Yahoo Finance ticker symbols, e.g. ``["AAPL", "MSFT", "NVDA"]``.
+        start (str): Start date (default ``"2010-01-01"``).
+        end (str, optional): End date; defaults to today so the dataset is always current.
+        window_size (int): Lookback window in trading days (default 60).
+        train_ratio (float): Fraction for train split.
+        val_ratio (float): Fraction for validation split.
+
+    Returns:
+        dict: Same keys as :func:`build_dataset` but with samples from all tickers pooled together.
+    """
+    splits: dict[str, list[torch.Tensor]] = {
+        "X_train": [], "y_train": [],
+        "X_val":   [], "y_val":   [],
+        "X_test":  [], "y_test":  [],
+    }
+
+    for ticker in tickers:
+        try:
+            data = build_dataset(
+                ticker,
+                start=start,
+                end=end,
+                window_size=window_size,
+                train_ratio=train_ratio,
+                val_ratio=val_ratio,
+                save=False,
+            )
+            for k in splits:
+                splits[k].append(data[k])
+            log.info(
+                "Added %-6s — train=%d  val=%d  test=%d windows",
+                ticker,
+                len(data["X_train"]),
+                len(data["X_val"]),
+                len(data["X_test"]),
+            )
+        except Exception as exc:
+            log.warning("Skipping %s: %s", ticker, exc)
+
+    if not splits["X_train"]:
+        raise RuntimeError("No ticker data was successfully downloaded.")
+
+    return {k: torch.cat(v) for k, v in splits.items()}
+
+
 def load_processed(
     ticker: str = "AAPL",
     processed_dir: Path | None = None,
 ) -> dict[str, torch.Tensor]:
     """Load previously saved ``.npz`` artefacts back as torch tensors.
 
-    Parameters
-    ----------
-    ticker : str
-        Ticker used when ``build_dataset`` was called.
-    processed_dir : Path, optional
-        Folder containing the ``.npz`` file; defaults to
-        ``<repo_root>/data/processed/``.
+    Args:
+        ticker (str): Ticker used when ``build_dataset`` was called.
+        processed_dir (Path, optional): Folder containing the ``.npz`` file; defaults to
+            ``<repo_root>/data/processed/``.
 
-    Returns
-    -------
-    dict with the same keys as :func:`build_dataset`.
+    Returns:
+        dict: Same keys as :func:`build_dataset`.
     """
     if processed_dir is None:
         processed_dir = DATA_DIR / "processed"

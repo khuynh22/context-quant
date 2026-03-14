@@ -18,11 +18,11 @@ Key libraries: PyTorch (CPU by default), Hugging Face `transformers` (`ProsusAI/
 
 ## Environment & Setup
 
-- **Conda env**: `conda env create -f environment.yml && conda activate context-quant`
-- **Python**: 3.11 required (pinned in `environment.yml`)
+- **uv env**: `uv sync` (reads `pyproject.toml` + `uv.lock`, creates `.venv` automatically)
+- **Python**: 3.11 required (pinned in `.python-version`)
 - **Verify**: `python verify_setup.py` — runs import checks and a tensor smoke test
 - **Jupyter**: `jupyter lab` — notebooks expect the `context-quant` kernel
-- PyTorch is CPU-only by default; swap `cpuonly` for a CUDA channel in `environment.yml` for GPU
+- PyTorch is CPU-only by default; change the `[tool.uv.sources]` index in `pyproject.toml` to a CUDA channel for GPU
 
 ## Project Layout
 

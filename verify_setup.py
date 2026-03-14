@@ -1,7 +1,7 @@
 """
-Run this after creating the conda environment to confirm everything is working.
+Run this after setting up the uv environment to confirm everything is working.
 
-    python verify_setup.py
+    uv run python verify_setup.py
 """
 
 import sys
@@ -32,7 +32,8 @@ for label, module in libs:
 try:
     import torch
     cuda_available = torch.cuda.is_available()
-    device_info = f"{torch.__version__}  |  CUDA: {'YES (' + torch.cuda.get_device_name(0) + ')' if cuda_available else 'no (CPU only)'}"
+    cuda_str = "YES (" + torch.cuda.get_device_name(0) + ")" if cuda_available else "no (CPU only)"
+    device_info = f"{torch.__version__}  |  CUDA: {cuda_str}"
     # Quick tensor smoke-test
     a = torch.tensor([1.0, 2.0, 3.0])
     b = torch.tensor([4.0, 5.0, 6.0])
@@ -85,4 +86,4 @@ print("=" * 60)
 if all_ok:
     print("  All checks passed. You're ready to open Jupyter Lab!\n")
 else:
-    print("  Some checks failed. Run:  conda env create -f environment.yml\n")
+    print("  Some checks failed. Run:  uv sync\n")
