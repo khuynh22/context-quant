@@ -37,7 +37,6 @@ from sklearn.preprocessing import StandardScaler
 
 from src.data_loader import (
     FEATURE_COLS,
-    SECTOR_MAP,
     WINDOW_SIZE,
     add_technical_indicators,
     download_ohlcv,
@@ -117,11 +116,11 @@ def get_current_price(ticker: str) -> float | None:
 
 def build_inference_inputs(
     ticker: str,
-) -> tuple[torch.Tensor, torch.Tensor, float] | None:
+) -> tuple[torch.Tensor, float] | None:
     """Build model inputs for a single ticker.
 
     Returns:
-        ``(x_temporal [1, 60, 14], x_sector [1], atr_pct)`` or ``None`` on failure.
+        ``(x_temporal [1, WINDOW_SIZE, 14], atr_pct)`` or ``None`` on failure.
         The scaler is fit on all available data (no train/val split for live inference).
     """
     try:
@@ -146,13 +145,10 @@ def build_inference_inputs(
         X_all = df[FEATURE_COLS].values.astype(np.float32)
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X_all)
-        window = X_scaled[-WINDOW_SIZE:]                         # [60, 14]
+        window = X_scaled[-WINDOW_SIZE:]   # [WINDOW_SIZE, 14]
 
-        x_temporal = torch.tensor(window[np.newaxis], dtype=torch.float32)  # [1, 60, 14]
-        sector_id = SECTOR_MAP.get(ticker.upper(), 8)
-        x_sector = torch.tensor([sector_id], dtype=torch.long)  # [1]
-
-        return x_temporal, x_sector, atr_pct
+        x_temporal = torch.tensor(window[np.newaxis], dtype=torch.float32)
+        return x_temporal, atr_pct
     except Exception as exc:
         log.warning("build_inference_inputs failed for %s: %s", ticker, exc)
         return None
@@ -194,31 +190,31 @@ def _open_position(
     shares = notional / price
     portfolio["cash"] -= notional
     portfolio["positions"][ticker] = {
-        "side":             "long" if signal.action == "BUY" else "short",
-        "confidence":       signal.confidence,
-        "predicted_return": signal.predicted_return,
-        "entry_price":      price,
-        "shares":           shares,
-        "notional":         notional,
-        "entry_date":       today,
-        "hold_days":        0,
-        "stop_loss_pct":    signal.stop_loss_pct,
-        "take_profit_pct":  signal.take_profit_pct,
+        "side": "long" if signal.action == "BUY" else "short",
+        "confidence": signal.confidence,
+        "signed_signal": signal.signed_signal,
+        "entry_price": price,
+        "shares": shares,
+        "notional": notional,
+        "entry_date": today,
+        "hold_days": 0,
+        "stop_loss_pct": signal.stop_loss_pct,
+        "take_profit_pct": signal.take_profit_pct,
     }
     _append_journal({
         "date": today, "action": "OPEN", "ticker": ticker,
         "side": portfolio["positions"][ticker]["side"],
         "confidence": round(signal.confidence, 4),
-        "predicted_return": round(signal.predicted_return, 4),
+        "predicted_return": round(signal.signed_signal, 4),
         "price": round(price, 4), "shares": round(shares, 6),
         "notional": round(notional, 2), "pnl": 0, "pnl_pct": 0,
         "reason": "signal", "cash_after": round(portfolio["cash"], 2),
     })
     log.info(
-        "  OPEN  %-6s %-5s  $%.2f @ $%.2f  conf=%.0f%%  ret_pred=%+.1f%%  "
+        "  OPEN  %-6s %-5s  $%.2f @ $%.2f  conf=%.0f%%  signal=%+.2f  "
         "SL=%.1f%%  TP=%.1f%%",
         ticker, portfolio["positions"][ticker]["side"].upper(),
-        notional, price, signal.confidence * 100, signal.predicted_return * 100,
+        notional, price, signal.confidence * 100, signal.signed_signal,
         signal.stop_loss_pct * 100, signal.take_profit_pct * 100,
     )
 
@@ -259,7 +255,7 @@ def _close_position(
         "date": today, "action": "CLOSE", "ticker": ticker,
         "side": pos["side"],
         "confidence": pos["confidence"],
-        "predicted_return": pos.get("predicted_return", 0),
+        "predicted_return": pos.get("signed_signal", 0),
         "price": round(current_price, 4), "shares": round(shares, 6),
         "notional": round(proceeds, 2), "pnl": round(pnl, 2),
         "pnl_pct": round(pnl_pct, 4), "reason": reason,
@@ -325,8 +321,8 @@ def run_daily(tickers: list[str], engine: SignalEngine) -> None:
         inputs = build_inference_inputs(ticker)
         if inputs is None:
             continue
-        x_temporal, x_sector, atr_pct = inputs
-        signal = engine.generate(x_temporal, x_sector, current_atr_pct=atr_pct)
+        x_temporal, atr_pct = inputs
+        signal = engine.generate(x_temporal, current_atr_pct=atr_pct)
         if signal.action != "HOLD":
             new_signals.append((ticker, signal, atr_pct))
             log.debug("  %s → %s", ticker, signal)
@@ -491,11 +487,11 @@ if __name__ == "__main__":
 
     engine = SignalEngine.from_checkpoint(
         ckpt_path,
-        conf_threshold=args.conf_threshold,
+        edge_threshold=args.conf_threshold,
         max_position=args.max_position,
     )
     log.info(
-        "SignalEngine ready  conf_threshold=%.2f  max_position=%.0f%%",
+        "SignalEngine ready  edge_threshold=%.2f  max_position=%.0f%%",
         args.conf_threshold, args.max_position * 100,
     )
 
