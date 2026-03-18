@@ -58,8 +58,48 @@ Write-Host ""
 Write-Host "Scheduled task '$TaskName' registered successfully." -ForegroundColor Green
 Write-Host "Runs every weekday at 6:00 AM using: $UvExe"
 Write-Host "Logs written to: $LogDir\retrain.log"
+
+# ── Task 2: Paper trading session at 9:30 AM (market open) ───────────────────
+$PaperTaskName = "ContextQuant-PaperTrading"
+$PaperScript   = Join-Path $RepoRoot "paper_trader.py"
+
+$PaperAction = New-ScheduledTaskAction `
+    -Execute $UvExe `
+    -Argument "run python `"$PaperScript`"" `
+    -WorkingDirectory $RepoRoot
+
+# Run Mon–Fri at 9:30 AM (US market open)
+$PaperTrigger = New-ScheduledTaskTrigger `
+    -Weekly `
+    -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday `
+    -At "09:30AM"
+
+$PaperSettings = New-ScheduledTaskSettingsSet `
+    -ExecutionTimeLimit (New-TimeSpan -Hours 1) `
+    -StartWhenAvailable `
+    -RunOnlyIfNetworkAvailable
+
+if (Get-ScheduledTask -TaskName $PaperTaskName -ErrorAction SilentlyContinue) {
+    Unregister-ScheduledTask -TaskName $PaperTaskName -Confirm:$false
+    Write-Host "Removed old task '$PaperTaskName'."
+}
+
+Register-ScheduledTask `
+    -TaskName  $PaperTaskName `
+    -Action    $PaperAction `
+    -Trigger   $PaperTrigger `
+    -Settings  $PaperSettings `
+    -Principal $Principal `
+    -Description "Run ContextQuant paper trading session at market open"
+
+Write-Host ""
+Write-Host "Scheduled task '$PaperTaskName' registered successfully." -ForegroundColor Green
+Write-Host "Runs every weekday at 9:30 AM (market open)"
 Write-Host ""
 Write-Host "Useful commands:"
-Write-Host "  Run now:    Start-ScheduledTask -TaskName '$TaskName'"
-Write-Host "  Check log:  Get-Content '$LogDir\retrain.log' -Tail 40"
-Write-Host "  Remove:     Unregister-ScheduledTask -TaskName '$TaskName' -Confirm:`$false"
+Write-Host "  Run retrain now:      Start-ScheduledTask -TaskName '$TaskName'"
+Write-Host "  Run paper trade now:  Start-ScheduledTask -TaskName '$PaperTaskName'"
+Write-Host "  Check retrain log:    Get-Content '$LogDir\retrain.log' -Tail 40"
+Write-Host "  View signals today:   Get-Content (Get-ChildItem paper_trading\journal.csv)"
+Write-Host "  Performance report:   uv run python paper_trader.py --report"
+Write-Host "  Remove all tasks:     Unregister-ScheduledTask -TaskName '$TaskName','$PaperTaskName' -Confirm:`$false"

@@ -25,7 +25,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader, TensorDataset
 
 from src.model import ContextQuantFusionNet, build_model
@@ -47,13 +47,14 @@ def make_loaders(
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
     """Build train / val / test ``DataLoader``s from the ``build_dataset`` output dict.
 
-    A zero-filled sentinel sentiment tensor (neutral prior) is appended when
-    the dict does not contain ``X_sentiment_*`` keys.
+    Each batch yields ``(X_temporal, X_sector, X_sentiment, y)`` where:
+    - ``X_sector`` is a long tensor of sector IDs (defaults to 8 if not in data).
+    - ``X_sentiment`` defaults to a neutral prior if not in data.
 
     Args:
-        data (dict): Keys ``X_train``, ``y_train``, ``X_val``, ``y_val``, ``X_test``, ``y_test``.
+        data (dict): Output of ``build_dataset`` or ``build_multi_dataset``.
         batch_size (int): Samples per mini-batch (default 64).
-        sentiment_dim (int): Sentiment vector width used when no real sentiment tensors are
+        sentiment_dim (int): Sentiment vector width when no real sentiment tensors are
             present (default 3).
 
     Returns:
@@ -62,12 +63,18 @@ def make_loaders(
     def _loader(split: str, shuffle: bool) -> DataLoader:
         X = data[f"X_{split}"]
         y = data[f"y_{split}"]
-        key = f"X_sentiment_{split}"
-        if key in data:
-            s = data[key]
-        else:
-            s = torch.full((X.size(0), sentiment_dim), fill_value=1.0 / sentiment_dim)
-        ds = TensorDataset(X, s, y)
+        # Sector IDs — default to 8 (catch-all) if not provided
+        sec_key = f"sector_{split}"
+        sec = data[sec_key] if sec_key in data else torch.full((X.size(0),), 8, dtype=torch.long)
+        # Sentiment — default to neutral prior if not provided
+        sent_key = f"X_sentiment_{split}"
+        s = data[sent_key] if sent_key in data else torch.full(
+            (X.size(0), sentiment_dim), fill_value=1.0 / sentiment_dim
+        )
+        # Regression target — default to zeros if regression head not used
+        yr_key = f"y_return_{split}"
+        yr = data[yr_key] if yr_key in data else torch.zeros(X.size(0))
+        ds = TensorDataset(X, sec, s, y, yr)
         return DataLoader(ds, batch_size=batch_size, shuffle=shuffle, pin_memory=False)
 
     train_loader = _loader("train", shuffle=True)
@@ -111,28 +118,35 @@ def train_epoch(
     model: nn.Module,
     loader: DataLoader,
     optimizer: torch.optim.Optimizer,
-    criterion: nn.Module,
+    cls_criterion: nn.Module,
+    ret_criterion: nn.Module,
     device: torch.device,
+    return_weight: float = 0.3,
 ) -> float:
-    """Run one training epoch and return the average cross-entropy loss.
+    """Run one training epoch and return the average combined loss.
 
     Args:
         model (nn.Module): The model to train.
-        loader (DataLoader): Yields ``(X_temporal, X_sentiment, y)`` batches.
+        loader (DataLoader): Yields ``(X_temporal, X_sector, X_sentiment, y, y_return)`` batches.
         optimizer (torch.optim.Optimizer): Gradient-descent optimizer.
-        criterion (nn.Module): Loss function, typically ``nn.CrossEntropyLoss``.
+        cls_criterion (nn.Module): Classification loss (CrossEntropyLoss).
+        ret_criterion (nn.Module): Regression loss (HuberLoss).
         device (torch.device): Device to run on.
+        return_weight (float): Weight for regression loss; classification gets `1 - return_weight`.
 
     Returns:
-        float: Mean loss over all batches.
+        float: Mean combined loss over all batches.
     """
     model.train()
     total_loss = 0.0
-    for xb, sb, yb in loader:
-        xb, sb, yb = xb.to(device), sb.to(device), yb.to(device)
+    for xb, sec_b, sb, yb, yr_b in loader:
+        xb, sec_b, sb = xb.to(device), sec_b.to(device), sb.to(device)
+        yb, yr_b = yb.to(device), yr_b.to(device)
         optimizer.zero_grad()
-        logits = model(xb, sb)                # [B, 5]
-        loss = criterion(logits, yb)
+        logits, ret_pred = model(xb, sec_b, sb)
+        cls_loss = cls_criterion(logits, yb)
+        ret_loss = ret_criterion(ret_pred, yr_b)
+        loss = (1.0 - return_weight) * cls_loss + return_weight * ret_loss
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
@@ -143,16 +157,20 @@ def train_epoch(
 def evaluate(
     model: nn.Module,
     loader: DataLoader,
-    criterion: nn.Module,
+    cls_criterion: nn.Module,
+    ret_criterion: nn.Module,
     device: torch.device,
+    return_weight: float = 0.3,
 ) -> tuple[float, float]:
     """Evaluate *model* on *loader*.
 
     Args:
         model (nn.Module): The model to evaluate.
-        loader (DataLoader): Yields ``(X_temporal, X_sentiment, y)`` batches.
-        criterion (nn.Module): Loss function.
+        loader (DataLoader): Yields ``(X_temporal, X_sector, X_sentiment, y, y_return)`` batches.
+        cls_criterion (nn.Module): Classification loss.
+        ret_criterion (nn.Module): Regression loss.
         device (torch.device): Device to run on.
+        return_weight (float): Weight for regression loss.
 
     Returns:
         tuple[float, float]: ``(avg_loss, accuracy)``.
@@ -163,10 +181,14 @@ def evaluate(
     all_labels: list[torch.Tensor] = []
 
     with torch.no_grad():
-        for xb, sb, yb in loader:
-            xb, sb, yb = xb.to(device), sb.to(device), yb.to(device)
-            logits = model(xb, sb)
-            total_loss += criterion(logits, yb).item() * len(yb)
+        for xb, sec_b, sb, yb, yr_b in loader:
+            xb, sec_b, sb = xb.to(device), sec_b.to(device), sb.to(device)
+            yb, yr_b = yb.to(device), yr_b.to(device)
+            logits, ret_pred = model(xb, sec_b, sb)
+            cls_loss = cls_criterion(logits, yb)
+            ret_loss = ret_criterion(ret_pred, yr_b)
+            loss = (1.0 - return_weight) * cls_loss + return_weight * ret_loss
+            total_loss += loss.item() * len(yb)
             all_preds.append(logits.cpu())
             all_labels.append(yb.cpu())
 
@@ -183,12 +205,14 @@ def train(
     model: ContextQuantFusionNet | None = None,
     data: dict[str, torch.Tensor] | None = None,
     ticker: str | list[str] = "AAPL",
-    n_epochs: int = 60,
-    lr: float = 1e-3,
+    n_epochs: int = 100,
+    lr: float = 3e-4,
+    weight_decay: float = 1e-4,
     batch_size: int = 64,
-    patience: int = 10,
+    patience: int = 20,
     min_delta: float = 1e-4,
     use_class_weights: bool = True,
+    return_weight: float = 0.3,
     seed: int = 42,
     checkpoint_dir: Path | None = None,
     device: torch.device | None = None,
@@ -243,14 +267,15 @@ def train(
 
     # ── Loss ──────────────────────────────────────────────────────────────────
     if use_class_weights:
-        w = compute_class_weights_tensor(data["y_train"].numpy()).to(device)
-        criterion = nn.CrossEntropyLoss(weight=w)
+        w = compute_class_weights_tensor(data["y_train"].numpy(), n_classes=3).to(device)
+        cls_criterion = nn.CrossEntropyLoss(weight=w, label_smoothing=0.1)
     else:
-        criterion = nn.CrossEntropyLoss()
+        cls_criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    ret_criterion = nn.HuberLoss()
 
     # ── Optimizer & scheduler ─────────────────────────────────────────────────
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5, min_lr=1e-6)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    scheduler = CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=1e-6)
     early_stop = EarlyStopping(patience=patience, min_delta=min_delta)
 
     # ── History ───────────────────────────────────────────────────────────────
@@ -266,10 +291,14 @@ def train(
     log.info("Starting training — max %d epochs, device=%s", n_epochs, device)
 
     for epoch in range(1, n_epochs + 1):
-        t_loss = train_epoch(model, train_loader, optimizer, criterion, device)
-        v_loss, v_acc = evaluate(model, val_loader, criterion, device)
+        t_loss = train_epoch(
+            model, train_loader, optimizer, cls_criterion, ret_criterion, device, return_weight
+        )
+        v_loss, v_acc = evaluate(
+            model, val_loader, cls_criterion, ret_criterion, device, return_weight
+        )
 
-        scheduler.step(v_loss)
+        scheduler.step()
         early_stop(v_loss)
 
         history["train_loss"].append(t_loss)
@@ -305,6 +334,22 @@ def train(
     log.info(
         "Training complete. Best val_loss=%.4f  checkpoint → %s", best_val_loss, best_checkpoint
     )
+
+    # Load best checkpoint and print per-class breakdown on val set.
+    # This shows whether the model is predicting all 3 classes or collapsing to Hold.
+    ckpt = torch.load(best_checkpoint, map_location=device)
+    model.load_state_dict(ckpt["model_state_dict"])
+    model.eval()
+    all_preds: list[torch.Tensor] = []
+    all_labels: list[torch.Tensor] = []
+    with torch.no_grad():
+        for xb, sec_b, sb, yb, _ in val_loader:
+            logits, _ = model(xb.to(device), sec_b.to(device), sb.to(device))
+            all_preds.append(logits.cpu())
+            all_labels.append(yb.cpu())
+    report = classification_report(torch.cat(all_preds), torch.cat(all_labels))
+    log.info("Val per-class report (best checkpoint, epoch %d):\n%s", ckpt["epoch"], report)
+
     return history
 
 
@@ -330,17 +375,18 @@ def evaluate_test(
     if device is None:
         device = get_device()
     _, _, test_loader = make_loaders(data, batch_size=batch_size)
-    criterion = nn.CrossEntropyLoss()
+    cls_criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    ret_criterion = nn.HuberLoss()
     model = model.to(device)
-    t_loss, t_acc = evaluate(model, test_loader, criterion, device)
+    t_loss, t_acc = evaluate(model, test_loader, cls_criterion, ret_criterion, device)
 
     # Gather all preds for classification_report
     model.eval()
     all_preds: list[torch.Tensor] = []
     all_labels: list[torch.Tensor] = []
     with torch.no_grad():
-        for xb, sb, yb in test_loader:
-            logits = model(xb.to(device), sb.to(device))
+        for xb, sec_b, sb, yb, _ in test_loader:
+            logits, _ = model(xb.to(device), sec_b.to(device), sb.to(device))
             all_preds.append(logits.cpu())
             all_labels.append(yb.cpu())
 
@@ -365,10 +411,19 @@ if __name__ == "__main__":
                         help="Path to a text file with one ticker per line. "
                              "Blank lines and lines starting with # are ignored. "
                              "Overrides --ticker and --tickers.")
-    parser.add_argument("--epochs", type=int, default=150)
-    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--patience", type=int, default=15)
+    parser.add_argument("--patience", type=int, default=20)
+    parser.add_argument("--weight-decay", type=float, default=1e-4,
+                        help="L2 regularization for Adam optimizer (default: 1e-4).")
+    parser.add_argument("--no-class-weights", action="store_false", dest="class_weights",
+                        help="Disable balanced class weights in loss function.")
+    parser.add_argument(
+        "--return-weight", type=float, default=0.3,
+        help="Weight for regression (return) loss; classification gets 1-w (default: 0.3)."
+    )
+    parser.set_defaults(class_weights=True)
     args = parser.parse_args()
 
     if args.tickers_file:
@@ -390,8 +445,11 @@ if __name__ == "__main__":
         ticker=ticker_arg,
         n_epochs=args.epochs,
         lr=args.lr,
+        weight_decay=args.weight_decay,
         batch_size=args.batch_size,
         patience=args.patience,
+        use_class_weights=args.class_weights,
+        return_weight=args.return_weight,
     )
     final_acc = hist["val_acc"][-1]
     print(f"\nFinished. Final val_acc={final_acc:.3f}")

@@ -1,25 +1,13 @@
 # ContextQuant — training universe
 # One ticker per line. Blank lines and lines starting with # are ignored.
-# Edit freely — add or remove symbols as needed.
 # Pass this file with:  uv run python -m src.train --tickers-file tickers.txt
-
-# ── Broad market ETFs ─────────────────────────────────────────────────────────
-SPY
-IVV
-QQQ
-QQQM
-IWM
-DIA
-VOO
-VTI
-
-# ── Gold & commodities ────────────────────────────────────────────────────────
-GLD
-IAU
-SLV
-GDX
-NEM
-GOLD
+#
+# Rules:
+#   - Individual equities only. No ETFs, no index funds, no commodity trusts.
+#   - ETFs and their constituents in the same universe create circular signal
+#     (model learns "SPY up → AAPL up") which is not tradeable alpha.
+#   - Commodity ETFs (GLD, SLV, IAU) removed — different market dynamics,
+#     driven by FX/rates/geopolitics, not equity earnings cycles.
 
 # ── Mega-cap tech ─────────────────────────────────────────────────────────────
 AAPL
@@ -82,6 +70,8 @@ CVX
 SLB
 COP
 EOG
+OXY
+MPC
 
 # ── Consumer discretionary ────────────────────────────────────────────────────
 WMT
@@ -93,6 +83,8 @@ SBUX
 TGT
 LOW
 TJX
+BKNG
+ABNB
 
 # ── Consumer staples ──────────────────────────────────────────────────────────
 PG
@@ -100,6 +92,8 @@ KO
 PEP
 PM
 MO
+CL
+MDLZ
 
 # ── Industrials ───────────────────────────────────────────────────────────────
 CAT
@@ -111,22 +105,33 @@ FDX
 LMT
 RTX
 DE
+ETN
+EMR
 
 # ── Communication ─────────────────────────────────────────────────────────────
 VZ
 T
 CMCSA
 DIS
+CHTR
 
 # ── Real estate (REITs) ───────────────────────────────────────────────────────
 AMT
 PLD
 EQIX
+PSA
+O
 
-# ── Utilities ────────────────────────────────────────────────────────────────
+# ── Utilities ─────────────────────────────────────────────────────────────────
 NEE
 DUK
+SO
+D
+AEP
 
-# ── Materials ────────────────────────────────────────────────────────────────
+# ── Materials ─────────────────────────────────────────────────────────────────
 LIN
 APD
+NUE
+FCX
+GOLD

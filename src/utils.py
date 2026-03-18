@@ -23,7 +23,7 @@ from sklearn.utils.class_weight import compute_class_weight
 
 log = logging.getLogger(__name__)
 
-CLASS_LABELS: Final[list[str]] = ["Strong Sell", "Sell", "Hold", "Buy", "Strong Buy"]
+CLASS_LABELS: Final[list[str]] = ["Sell", "Hold", "Buy"]
 
 # ── 1. Technical indicators ──────────────────────────────────────────────────
 
@@ -125,15 +125,15 @@ def get_device() -> torch.device:
 
 def compute_class_weights_tensor(
     y: np.ndarray | torch.Tensor,
-    n_classes: int = 5,
+    n_classes: int = 3,
 ) -> torch.Tensor:
-    """Compute balanced class weights for a 5-class label vector.
+    """Compute balanced class weights for a label vector.
 
     Useful for passing to ``nn.CrossEntropyLoss(weight=...)``.
 
     Args:
-        y (array-like of int): Integer class labels (0-4).
-        n_classes (int): Total number of classes (default 5).
+        y (array-like of int): Integer class labels.
+        n_classes (int): Total number of classes (default 3).
 
     Returns:
         torch.Tensor: Shape (n_classes,), float weights inversely proportional to class frequency.
