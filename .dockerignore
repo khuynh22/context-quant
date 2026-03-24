@@ -1,0 +1,30 @@
+# Virtual environment (rebuilt inside the container)
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+.mypy_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Runtime state (mounted as volumes)
+paper_trading/
+logs/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs
+*.md

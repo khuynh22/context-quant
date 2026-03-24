@@ -39,3 +39,6 @@ Thumbs.db
 # Paper trading runtime state (personal, machine-specific)
 paper_trading/portfolio.json
 paper_trading/journal.csv
+
+# Logs
+logs/

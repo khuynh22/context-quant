@@ -1,0 +1,32 @@
+services:
+
+  # ── Streamlit dashboard ─────────────────────────────────────────────────────
+  # Open http://localhost:8501 to see signals, portfolio, and equity curve.
+  dashboard:
+    build: .
+    container_name: contextquant-dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./paper_trading:/app/paper_trading   # live portfolio & journal
+      - ./models:/app/models                 # trained checkpoints
+    restart: unless-stopped
+
+  # ── Paper trader (cron) ─────────────────────────────────────────────────────
+  # Runs paper_trader.py Mon–Fri at 14:30 UTC (9:30 AM ET / market open).
+  # Adjust CRON_SCHEDULE below if you're in a different timezone.
+  # Format: "minute hour * * day-of-week"  (all times UTC)
+  #
+  #   9:30 AM ET during winter (EST, UTC-5) → 14:30 UTC
+  #   9:30 AM ET during summer (EDT, UTC-4) → 13:30 UTC
+  paper-trader:
+    build: .
+    container_name: contextquant-paper-trader
+    entrypoint: ["/bin/bash", "/app/docker/paper-trader-entrypoint.sh"]
+    environment:
+      - CRON_SCHEDULE=30 14 * * 1-5
+    volumes:
+      - ./paper_trading:/app/paper_trading   # shared with dashboard
+      - ./models:/app/models
+      - ./logs:/app/logs
+    restart: unless-stopped
