@@ -390,7 +390,8 @@ with tab_signal:
                     # Price chart — last 60 days
                     st.markdown(
                         "<div style='font-size:0.68rem;font-weight:700;letter-spacing:0.09em;"
-                        "text-transform:uppercase;color:#8b949e;margin-top:1.5rem;margin-bottom:4px;'>"
+                        "text-transform:uppercase;color:#8b949e;margin-top:1.5rem;"
+                        "margin-bottom:4px;'>"
                         "Close · last 60 days</div>",
                         unsafe_allow_html=True,
                     )
