@@ -36,6 +36,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Claude Code local settings (personal, machine-specific)
+.claude/settings.local.json
+
 # Paper trading runtime state (personal, machine-specific)
 paper_trading/portfolio.json
 paper_trading/journal.csv

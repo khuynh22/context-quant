@@ -7,7 +7,7 @@
 
 set -e
 
-CRON_SCHEDULE="${CRON_SCHEDULE:-30 14 * * 1-5}"
+CRON_SCHEDULE="${CRON_SCHEDULE:-30 13 * * 1-5}"
 LOG_FILE="/app/logs/paper-trader.log"
 
 echo "Paper trader cron schedule: ${CRON_SCHEDULE} (UTC)"
@@ -15,6 +15,7 @@ echo "Logs → ${LOG_FILE}"
 
 # Write the crontab for root
 cat > /etc/cron.d/paper-trader <<EOF
+PATH=/usr/local/bin:/usr/bin:/bin
 ${CRON_SCHEDULE} root cd /app && uv run python paper_trader.py >> ${LOG_FILE} 2>&1
 EOF
 

@@ -24,7 +24,7 @@ services:
     container_name: contextquant-paper-trader
     entrypoint: ["/bin/bash", "/app/docker/paper-trader-entrypoint.sh"]
     environment:
-      - CRON_SCHEDULE=30 14 * * 1-5
+      - CRON_SCHEDULE=30 13 * * 1-5
     volumes:
       - ./paper_trading:/app/paper_trading   # shared with dashboard
       - ./models:/app/models
